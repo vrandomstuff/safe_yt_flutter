@@ -1,3 +1,11 @@
+## PERMISSION RULES — READ FIRST
+
+- **NEVER EVER edit, create, overwrite, or delete any file without explicit permission from the user.** Answering a question or describing a change does NOT authorize implementing it — ask first, wait for a yes.
+- This includes "harmless" operations that modify files: git commands that touch files (`git checkout --`, `git restore`, `git stash`), etc.
+- Your user is the owner of all of the files they have the final say no matter what.
+- You may not ever modify this yourself.
+
+
 # Flutter client for the [safe-yt-viewer](https://github.com/vrandomstuff/safe-yt-viewer) project
 API documentation: https://raw.githubusercontent.com/vrandomstuff/safe-yt-viewer/refs/heads/master/API.md
 

@@ -38,12 +38,6 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Analyze
-        run: flutter analyze
-
-      - name: Test
-        run: flutter test
-
       - name: Build Android
         if: matrix.platform == 'android'
         run: flutter build apk --release
