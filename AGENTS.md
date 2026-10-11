@@ -2,24 +2,32 @@
 API documentation: https://raw.githubusercontent.com/vrandomstuff/safe-yt-viewer/refs/heads/master/API.md
 
 ## Layout
-- `lib/main.dart` — entrypoint `App` → `AppHome` (stateful; fetches page 1 of videos in `initState`, shows a spinner while loading). The stock `MyApp`/`MyHomePage` counter demo is still in this file.
-- `lib/api.dart` — `Api` (HTTP via `package:http`) and the `VideoItem` model with `fromJson`.
-- `lib/config.dart` — `Config`; API base URL persisted in `SharedPreferencesAsync` under key `api_url`.
-- `lib/video.dart` — `VideoEntry`, the thumbnail/title/channel card.
-- No routing, state management, or DI: `Api`/`Config` are instantiated directly, and even private-backed named params (`required this._video`) are used. Follow this plain-Widget style.
+- `lib/main.dart` — entrypoint `App` → `AppHome` (stateful). On init, checks `Config.getApiUrl()` (SharedPreferences `api_url`); if unset/empty shows `ApiUrlPrompt`, otherwise loads first page of videos. `AppHome` manages loading/error states, pagination, and exposes API settings via the app bar. The legacy `MyApp`/`MyHomePage` counter demo remains in this file.
+- `lib/api.dart` — `Api` uses `package:http`, reads base URL from `Config`, returns `List<VideoItem>?` for `/videos?page=N`; `postWatch(id)` hits `/watch/$id`. `VideoItem` has `fromJson`.
+- `lib/config.dart` — `Config` wraps `SharedPreferencesAsync` with key `api_url` (`get/set/clearApiUrl`).
+- `lib/video.dart` — `VideoEntry` (card). Taps call `Api.postWatch(video.id)` then navigate to `VideoPlayerScreen`.
+- `lib/video_player_screen.dart` — plays HLS at `$apiBaseUrl/m3u8/$videoId` via `media_kit` + `media_kit_video` (`Player`/`VideoController`).
+- No routing framework, state management, or DI; widgets instantiate `Api`/`Config` directly. Follow this plain-Widget style.
 
 ## Commands
-- `flutter pub get` — install deps (run after editing `pubspec.yaml`)
+- `flutter pub get` — install deps after editing `pubspec.yaml`
 - `flutter analyze` — lint gate; run before considering work done
-- `flutter test` — full suite; `flutter test test/widget_test.dart` for one file
+- `flutter test` — run tests (if any exist in `test/`)
 - `flutter run` — dev server/hot reload
 
 Order matters: `flutter analyze` → `flutter test`.
 
+## CI
+`.github/workflows/build.yml` builds on `push`/`PR` to `master` (and manual dispatch) with a matrix:
+- Android (ubuntu-latest): `flutter build apk --release` → `build/app/outputs/flutter-apk/app-release.apk`
+- iOS (macos-latest): `flutter build ios --release --no-codesign`, then `ditto` to `build/ios/ipa/Runner.ipa`
+
+Both jobs run `flutter pub get`, `flutter analyze`, `flutter test`.
+
 ## Gotchas
-- The app needs an API base URL set via `Config.setApiUrl` (SharedPreferences `api_url`). If unset, `AppHome` shows the `ApiUrlPrompt` screen so the user can enter one; the settings icon in the app bar reopens it to change the URL. When the URL is set but `Api.getVideos` returns null, the body shows an error with a Retry button.
-- `test/widget_test.dart` still tests the stock `MyApp` counter demo, not the real `App`. Changing `AppHome` won't break it; renaming/removing `MyApp` will.
-- Dart SDK `^3.13.5` (Flutter 3.47.6). Dot-shorthand is used intentionally, e.g. `ColorScheme.fromSeed(...)` as `.fromSeed(...)` and `MainAxisAlignment.center` as `.center` — don't "fix" it.
-- `analysis_options.yaml` excludes `build/`, `android/`, `ios/`, `web/`, `windows/`, `macos/`, `linux/` — only `lib/` and `test/` are analyzed. `flutter_lints` with no extra rules.
-- No codegen, no `.env`, no Makefile/task runner — the commands above are the whole workflow. CI is `.github/workflows/build.yml` (matrix across Android/iOS, runs analyze + test).
-- You should not do `flutter build` that breaks vscode.
+- API base URL is required. No URL → `AppHome` shows `ApiUrlPrompt` (validates http(s) with authority). Settings icon reopens it prefilled (with Cancel). If URL set but `Api.getVideos` returns null, body shows error with Retry.
+- Android: `INTERNET` + `usesCleartextTraffic="true"` in `AndroidManifest.xml` (release/debug/profile include INTERNET). iOS: `NSAppTransportSecurity` allows arbitrary loads.
+- Dart SDK `^3.13.5`, Flutter `3.47.6`. Dot-shorthand is used intentionally (`ColorScheme.fromSeed(...)` as `.fromSeed(...)`, alignment `.center` etc.) — don't "fix" it.
+- `analysis_options.yaml` excludes `build/`, `android/`, `ios/`, `web/`, `windows/`, `macos/`, `linux/`; only `lib/` and `test/` are analyzed. Uses `flutter_lints`.
+- No codegen, no `.env`, no Makefile/task runner. Current test suite is the stock counter test (`test/widget_test.dart`) which is tracked in git; the repo previously deleted it locally but the tracked copy still exists. Avoid breaking it if you work with tests.
+- Keep changes minimal and in repo style. Always run `flutter analyze` before committing logical changes.
