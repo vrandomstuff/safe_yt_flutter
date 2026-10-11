@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:safe_yt_flutter/api.dart';
 import 'package:safe_yt_flutter/video.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized();
   runApp(const App());
 }
 
@@ -32,9 +35,8 @@ class AppHome extends StatefulWidget {
 
 class _AppHomeState extends State<AppHome> {
 
-  List<Row> _videos = [];
+  List<VideoItem> _videos = [];
   bool _isLoading = true;
-  // this is not final because this will be incremented in the future for paganation
   int _page = 1;
 
   final Api api = Api();
@@ -52,58 +54,54 @@ class _AppHomeState extends State<AppHome> {
   }
   Future<void> _fetchVideos() async {
     final videos = await api.getVideos(_page);
-    List<Row> rows = [];
     if (videos == null) {
       // TODO: Do error handling for api.getVideos
       throw FlutterError("api.getVideos(_page) failed.");
     }
-    for (var i = 0; i < videos.length; i += 3) {
-      final rowVideos = videos.sublist(
-        i,
-        (i + 3).clamp(0, videos.length),
-      );
-      rows.add(
-        Row(
-          children: rowVideos
-              .map((video) => VideoEntry(video: video))
-              .toList(),
-        ),
-      );
-    }
     if (mounted) { // Always check if widget is still in the tree
       setState(() {
-        _videos = [..._videos, ...rows];
+        _videos = [..._videos, ...videos];
         _isLoading = false;
       });
     }
   }
-  @override
+  
+    @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Material(child: CircularProgressIndicator());
-    }
-    return Material(
-      child: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              physics: BouncingScrollPhysics(),
+    // Use Scaffold for proper background, theme, and layout handling
+    return Scaffold(
+      body: _isLoading 
+        ? const Center(child: CircularProgressIndicator()) // Center the loader
+        : SingleChildScrollView(
+            child: Column(
               children: [
-                ..._videos,
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: IconButton.filled(
-                    onPressed: _loadMore,
-                    icon: const Icon(Icons.expand_more),
-                    tooltip: "Load more",
-                    iconSize: 50,
+                // 1. The Video Grid
+                Padding(
+                  padding: const EdgeInsets.all(10.0), // Give it some breathing room
+                  child: Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    alignment: WrapAlignment.center,
+                    children: _videos.map((video) => VideoEntry(video: video)).toList(),
+                  ),
+                ),
+
+                // 2. The Load More button
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 10),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: IconButton.filled(
+                      onPressed: _loadMore,
+                      icon: const Icon(Icons.expand_more),
+                      tooltip: "Load more",
+                      iconSize: 50,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-        ],
-      ),
     );
   }
 }

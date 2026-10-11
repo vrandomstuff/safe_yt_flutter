@@ -23,3 +23,4 @@ Order matters: `flutter analyze` → `flutter test`.
 - Dart SDK `^3.13.5` (Flutter 3.47.6). Dot-shorthand is used intentionally, e.g. `ColorScheme.fromSeed(...)` as `.fromSeed(...)` and `MainAxisAlignment.center` as `.center` — don't "fix" it.
 - `analysis_options.yaml` excludes `build/`, `android/`, `ios/`, `web/`, `windows/`, `macos/`, `linux/` — only `lib/` and `test/` are analyzed. `flutter_lints` with no extra rules.
 - No codegen, no `.env`, no Makefile/task runner, no CI — the commands above are the whole workflow.
+- You should not do `flutter build` that breaks vscode.
