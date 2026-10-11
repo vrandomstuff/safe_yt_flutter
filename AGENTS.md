@@ -17,10 +17,9 @@ API documentation: https://raw.githubusercontent.com/vrandomstuff/safe-yt-viewer
 Order matters: `flutter analyze` → `flutter test`.
 
 ## Gotchas
-- The app needs an API base URL set via `Config.setApiUrl` (SharedPreferences `api_url`). If unset, `Api.getVideos` returns null and `AppHome._fetchVideos` throws `FlutterError`. There is no settings UI yet, so a fresh run fails until the pref is written.
+- The app needs an API base URL set via `Config.setApiUrl` (SharedPreferences `api_url`). If unset, `AppHome` shows the `ApiUrlPrompt` screen so the user can enter one; the settings icon in the app bar reopens it to change the URL. When the URL is set but `Api.getVideos` returns null, the body shows an error with a Retry button.
 - `test/widget_test.dart` still tests the stock `MyApp` counter demo, not the real `App`. Changing `AppHome` won't break it; renaming/removing `MyApp` will.
-- `flutter analyze` currently emits one pre-existing info: `prefer_final_fields` for `_page` at `lib/main.dart:37` (never reassigned). Clear it while you're there.
 - Dart SDK `^3.13.5` (Flutter 3.47.6). Dot-shorthand is used intentionally, e.g. `ColorScheme.fromSeed(...)` as `.fromSeed(...)` and `MainAxisAlignment.center` as `.center` — don't "fix" it.
 - `analysis_options.yaml` excludes `build/`, `android/`, `ios/`, `web/`, `windows/`, `macos/`, `linux/` — only `lib/` and `test/` are analyzed. `flutter_lints` with no extra rules.
-- No codegen, no `.env`, no Makefile/task runner, no CI — the commands above are the whole workflow.
+- No codegen, no `.env`, no Makefile/task runner — the commands above are the whole workflow. CI is `.github/workflows/build.yml` (matrix across Android/iOS, runs analyze + test).
 - You should not do `flutter build` that breaks vscode.
