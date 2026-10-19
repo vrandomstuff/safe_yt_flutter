@@ -21,8 +21,8 @@ jobs:
             output: build/app/outputs/flutter-apk/app-release.apk
           - platform: ios
             os: macos-latest
-            artifact: Runner.ipa
-            output: build/ios/ipa/Runner.ipa
+            artifact: safe_yt.ipa
+            output: build/ios/ipa/safe_yt.ipa
 
     steps:
       - name: Checkout
@@ -49,10 +49,18 @@ jobs:
       - name: Package iOS app
         if: matrix.platform == 'ios'
         run: |
-          mkdir -p build/ios/ipa
+          set -euo pipefail
+          rm -rf build/ios/packaging
+          mkdir -p build/ios/ipa build/ios/packaging
           ditto -c -k --sequesterRsrc --keepParent \
             build/ios/iphoneos/Runner.app \
             build/ios/ipa/Runner.ipa
+          unzip -q build/ios/ipa/Runner.ipa -d build/ios/packaging
+          mkdir build/ios/packaging/Payload
+          mv build/ios/packaging/Runner.app build/ios/packaging/Payload/
+          cd build/ios/packaging
+          ditto -c -k --keepParent Payload ../ipa/safe_yt.ipa
+          rm -f ../ipa/Runner.ipa
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
