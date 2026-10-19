@@ -1,4 +1,4 @@
-package com.example.safe_yt_flutter
+package io.github.vtf6259.safe_yt_flutter
 
 import io.flutter.embedding.android.FlutterActivity
 

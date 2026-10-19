@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:safe_yt_flutter/api.dart';
 import 'package:safe_yt_flutter/config.dart';
-import 'package:safe_yt_flutter/video.dart';
+import 'package:safe_yt_flutter/video_list.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -96,6 +96,14 @@ class _AppHomeState extends State<AppHome> {
     await _fetchVideos();
   }
 
+  Future<void> _showPinsScreen() async {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ViewPins()
+      )
+    );
+  }
   Future<void> _fetchVideos() async {
     final videos = await api.getVideos(_page);
     if (!mounted) return; // Always check if widget is still in the tree
@@ -129,6 +137,11 @@ class _AppHomeState extends State<AppHome> {
       appBar: AppBar(
         title: const Text('Safe YT'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.push_pin),
+            tooltip: 'Pins',
+            onPressed: _showPinsScreen
+          ),
           IconButton(
             icon: const Icon(Icons.settings),
             tooltip: 'API settings',
@@ -168,38 +181,99 @@ class _AppHomeState extends State<AppHome> {
         ),
       );
     }
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          // 1. The Video Grid
-          Padding(
-            padding: const EdgeInsets.all(10.0), // Give it some breathing room
-            child: Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              alignment: WrapAlignment.center,
-              children: _videos.map((video) => VideoEntry(video: video)).toList(),
-            ),
-          ),
-
-          // 2. The Load More button
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 10),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: IconButton.filled(
-                onPressed: _loadMore,
-                icon: const Icon(Icons.expand_more),
-                tooltip: "Load more",
-                iconSize: 50,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+    return VideoList(videos: _videos, loadMore: _loadMore,);
   }
 }
+
+
+class ViewPins extends StatefulWidget {
+  const ViewPins({super.key});
+  
+  @override
+  State<ViewPins> createState() => _ViewPinsState();
+}
+
+class _ViewPinsState extends State<ViewPins> {
+
+  List<VideoItem> _videos = [];
+  bool _isLoading = true;
+  int _page = 1;
+  String? _error;
+
+  final Api api = Api();
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchVideos();
+  }
+
+  // Paganation
+  Future<void> _loadMore() async {
+    _page += 1;
+    await _fetchVideos();
+  }
+
+  Future<void> _fetchVideos() async {
+    final videos = await api.getVideos(_page, "pins");
+    if (!mounted) return; // Always check if widget is still in the tree
+    if (videos == null) {
+      setState(() {
+        _error = 'Could not load videos.';
+        _isLoading = false;
+      });
+      return;
+    }
+    setState(() {
+      _videos = [..._videos, ...videos];
+      _error = null;
+      _isLoading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Use Scaffold for proper background, theme, and layout handling
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Pins')
+      ),
+      body: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(_error!, textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () {
+                  setState(() {
+                    _error = null;
+                    _isLoading = true;
+                  });
+                  _fetchVideos();
+                },
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return VideoList(videos: _videos, loadMore: _loadMore,);
+  }
+}
+
 
 class ApiUrlPrompt extends StatefulWidget {
   const ApiUrlPrompt({

@@ -46,11 +46,11 @@ class Api {
 
       return videos;
     }
-    Future<List<VideoItem>?> getVideos(int page) async {
+    Future<List<VideoItem>?> getVideos(int page, [String route = "videos"]) async {
         if (await apiBaseUrl == null) {
           return null;
         }
-        var response = await http.get(Uri.parse("${await apiBaseUrl}/videos?page=${page.toString()}"));
+        var response = await http.get(Uri.parse("${await apiBaseUrl}/$route?page=${page.toString()}"));
         if(response.statusCode != 200) {
             debugPrint("getVideos: HTTP failed: ${response.statusCode} ${response.reasonPhrase}");
             return null;

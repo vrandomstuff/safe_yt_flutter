@@ -5,37 +5,63 @@
 - Your user is the owner of all of the files they have the final say no matter what.
 - You may not ever modify this yourself.
 
+# safe_yt_flutter
 
-# Flutter client for the [safe-yt-viewer](https://github.com/vrandomstuff/safe-yt-viewer) project
-API documentation: https://raw.githubusercontent.com/vrandomstuff/safe-yt-viewer/refs/heads/master/API.md
-
-## Layout
-- `lib/main.dart` — entrypoint `App` → `AppHome` (stateful). On init, checks `Config.getApiUrl()` (SharedPreferences `api_url`); if unset/empty shows `ApiUrlPrompt`, otherwise loads first page of videos. `AppHome` manages loading/error states, pagination, and exposes API settings via the app bar. The legacy `MyApp`/`MyHomePage` counter demo remains in this file.
-- `lib/api.dart` — `Api` uses `package:http`, reads base URL from `Config`, returns `List<VideoItem>?` for `/videos?page=N`; `postWatch(id)` hits `/watch/$id`. `VideoItem` has `fromJson`.
-- `lib/config.dart` — `Config` wraps `SharedPreferencesAsync` with key `api_url` (`get/set/clearApiUrl`).
-- `lib/video.dart` — `VideoEntry` (card). Taps call `Api.postWatch(video.id)` then navigate to `VideoPlayerScreen`.
-- `lib/video_player_screen.dart` — plays HLS at `$apiBaseUrl/m3u8/$videoId` via `media_kit` + `media_kit_video` (`Player`/`VideoController`).
-- No routing framework, state management, or DI; widgets instantiate `Api`/`Config` directly. Follow this plain-Widget style.
+Flutter client for [safe-yt-viewer](https://github.com/vrandomstuff/safe-yt-viewer).
+Upstream API contract (read it before touching `lib/api.dart`):
+https://raw.githubusercontent.com/vrandomstuff/safe-yt-viewer/refs/heads/master/API.md
 
 ## Commands
-- `flutter pub get` — install deps after editing `pubspec.yaml`
-- `flutter analyze` — lint gate; run before considering work done
-- `flutter test` — run tests (if any exist in `test/`)
-- `flutter run` — dev server/hot reload
+- `flutter pub get` — after editing `pubspec.yaml`
+- `flutter analyze` — **the only quality gate.** CI does not run it (see CI below), so run it yourself before calling work done.
+- `flutter run` — needs a reachable backend URL typed into the in-app prompt. Nothing is configured via `.env` or a build flag.
+- There is no `test/` directory and none is tracked. `flutter test` exits 1 with `Test directory "test" not found`. Do not add a test step to CI without first writing tests.
 
-Order matters: `flutter analyze` → `flutter test`.
+Toolchain: Dart `^3.13.5`, Flutter `3.47.6` (CI pins this), AGP 9.1.0, Kotlin 2.4.0, Java 17.
+
+## API base URL — the easiest thing to get wrong
+- The user-entered base URL **must end in `/api`**, and that is by design: the same server also hosts a web app, so every client route lives under `/api`. Do **not** prepend `/api` inside `lib/api.dart` to "fix" the mismatch — the user supplies it.
+- `Api.getVideos` builds `"<base>/$route?page=N"` with `route` defaulting to `"videos"` (`"pins"` on the pins screen), so entering `http://host:3000` requests `http://host:3000/videos` — but the server only serves `/api/videos`. The origin alone yields a bare "Could not load videos from …".
+- The URL is typed into `ApiUrlPrompt` on first launch and persisted in SharedPreferences under `api_url`. There is no env file, build flag, or default; clearing app data resets it. `_saveApiUrl` only strips trailing slashes.
+- Routes the client touches: `videos`, `pins`, `POST watch/{id}`, `m3u8/{id}`. The server also exposes `search`, `channel`, `getAvatar/{id}/{secret}`, `reCache/{id}/{secret}` — none are wired up.
+- `m3u8/{id}` playlist segment URIs come back **root-relative** (`/api/m3u8/...`), so they resolve against the origin, not the base URL. The first request spawns `yt-dlp` server-side and can take seconds.
+
+## Known sharp edges in `lib/`
+- `Api.getVideos` returns `null` for both "no base URL configured" and "non-200 status" — the UI cannot tell the two apart.
+- No `try`/`catch` anywhere around the `http` calls. A connection failure throws an unhandled async error and leaves the loading spinner up forever.
+- `POST /watch/{id}` is **not idempotent** server-side; `VideoEntry` fires one on every tap, so a double-tap records twice.
+- The server returns a **bare JSON array** with no wrapper and no total count, so there is no end-of-list signal. `_loadMore` just keeps incrementing `_page`.
+- `_AppHomeState._fetchVideos` / `_buildBody` and `_ViewPinsState._fetchVideos` / `_buildBody` are near-duplicates. Change one, check the other. `ViewPins` does **not** check for a configured URL, so with none set it just renders the generic error.
+- `_VideoPlayerScreenState._initializeVideoPlayer` throws `FlutterError` when the URL or video id is missing, rather than showing an error state.
+
+## Layout
+- `lib/main.dart` — `App` → `AppHome`; also `ViewPins` (pushed from the app bar pin icon) and `ApiUrlPrompt`.
+- `lib/api.dart` — `Api` (reads the base URL from `Config` via `package:http`) plus `VideoItem.fromJson`.
+- `lib/config.dart` — `Config`, a thin `SharedPreferencesAsync` wrapper keyed `api_url`.
+- `lib/video_list.dart` — `VideoList`: a `Wrap` grid of `VideoEntry` cards plus a "load more" button.
+- `lib/video.dart` — `VideoEntry` card; tap → `postWatch` then push `VideoPlayerScreen`.
+- `lib/video_player_screen.dart` — plays `<base>/m3u8/{id}` with `media_kit` + `media_kit_video`.
+- No routing framework, no state management, no DI — widgets instantiate `Api`/`Config` directly. Follow that plain-Widget style.
+
+## Conventions that look wrong but are not
+- **Dart 3.12 private named parameters.** `VideoEntry({required this._video})` is *called* as `VideoEntry(video: …)`; `VideoList({required this._videos, required this._loadMore})` as `VideoList(videos: …, loadMore: …)`. The underscore is stripped at the call site — renaming either side breaks it.
+- `VideoList._loadMore` is typed `dynamic`, so the callback is unchecked at the call site.
+- Each `VideoEntry` constructs its own `Api` (→ own `Config` → own `SharedPreferencesAsync`); so do `_AppHomeState` and `_ViewPinsState`. Adding cards multiplies those instances.
+
+## Platform config
+- Android ships `usesCleartextTraffic="true"`; iOS ships `NSAppTransportSecurity/NSAllowsArbitraryLoads`. Both exist so the app can reach an `http://` LAN backend — don't remove them.
+- Android release builds are signed with the **debug** key (`android/app/build.gradle.kts`); no real signing config exists yet.
+- `analysis_options.yaml` excludes every platform directory, so only `lib/` is ever analyzed.
+- `.metadata` lists `lib/main.dart` and `ios/Runner.xcodeproj/project.pbxproj` as `unmanaged_files` — `flutter migrate` will not touch them.
+
+## App identity
+Display name is "Safe YT"; application/bundle ID is `io.github.vtf6259.safe_yt_flutter` on all six platforms. Changing either means editing each platform separately — Android `build.gradle.kts` (`namespace` + `applicationId`), `AndroidManifest.xml` (`android:label`), and `MainActivity.kt`'s package **and its directory path**; iOS `Info.plist` + `project.pbxproj`; macOS `Configs/AppInfo.xcconfig` (`PRODUCT_NAME`, `PRODUCT_BUNDLE_IDENTIFIER`); Linux `CMakeLists.txt` `APPLICATION_ID` + `my_application.cc`; Windows `Runner.rc` + `main.cpp`; Web `index.html` + `manifest.json`.
+
+Do **not** change `name:` in `pubspec.yaml` from `safe_yt_flutter` — every `package:safe_yt_flutter/...` import depends on it.
 
 ## CI
-`.github/workflows/build.yml` builds on `push`/`PR` to `master` (and manual dispatch) with a matrix:
+`.github/workflows/build.yml` — on push/PR to `master` and `workflow_dispatch`, matrix of:
 - Android (ubuntu-latest): `flutter build apk --release` → `build/app/outputs/flutter-apk/app-release.apk`
-- iOS (macos-latest): `flutter build ios --release --no-codesign`, then `ditto` to `build/ios/ipa/Runner.ipa`
+- iOS (macos-latest): `flutter build ios --release --no-codesign`, then `ditto` → `build/ios/ipa/Runner.ipa`
 
-Both jobs run `flutter pub get`, `flutter analyze`, `flutter test`.
-
-## Gotchas
-- API base URL is required. No URL → `AppHome` shows `ApiUrlPrompt` (validates http(s) with authority). Settings icon reopens it prefilled (with Cancel). If URL set but `Api.getVideos` returns null, body shows error with Retry.
-- Android: `INTERNET` + `usesCleartextTraffic="true"` in `AndroidManifest.xml` (release/debug/profile include INTERNET). iOS: `NSAppTransportSecurity` allows arbitrary loads.
-- Dart SDK `^3.13.5`, Flutter `3.47.6`. Dot-shorthand is used intentionally (`ColorScheme.fromSeed(...)` as `.fromSeed(...)`, alignment `.center` etc.) — don't "fix" it.
-- `analysis_options.yaml` excludes `build/`, `android/`, `ios/`, `web/`, `windows/`, `macos/`, `linux/`; only `lib/` and `test/` are analyzed. Uses `flutter_lints`.
-- No codegen, no `.env`, no Makefile/task runner. Current test suite is the stock counter test (`test/widget_test.dart`) which is tracked in git; the repo previously deleted it locally but the tracked copy still exists. Avoid breaking it if you work with tests.
-- Keep changes minimal and in repo style. Always run `flutter analyze` before committing logical changes.
+Steps are `flutter pub get` + build, nothing else. There is **no** analyze or test step, so lint and test regressions reach `master` silently.

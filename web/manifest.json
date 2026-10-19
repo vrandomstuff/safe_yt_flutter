@@ -1,6 +1,6 @@
 {
-    "name": "safe_yt_flutter",
-    "short_name": "safe_yt_flutter",
+    "name": "Safe YT",
+    "short_name": "Safe YT",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
